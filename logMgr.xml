@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LogMgr version="2.3.0">
+    <!-- General Setting, lowest prioriy, Do not modify. -->
+    <General>
+        <!-- Default Log Level Limit: off/verbose/info/warn/error/fatal -->
+        <DefaultLevel>info</DefaultLevel>
+        <!-- Export mode: file | memory | console | dds | network -->
+        <VerboseExportMode>memory</VerboseExportMode>
+        <WarnExportMode>memory</WarnExportMode>
+        <ErrorExportMode>file</ErrorExportMode>
+        <!-- Optional: The maximum storage capacity of a single log file (b/kb/mb) -->
+        <LogFileMaxSize>1mb</LogFileMaxSize>
+        <!-- Limit the number of files written in a single day-->
+        <DailyLimitFIO>10000</DailyLimitFIO>
+        <!-- -2: use socket, -1 no network, >=0: use DDS with dds domain-->
+        <DDSDomain>-2</DDSDomain>
+        <ECUID>0</ECUID>
+        <!-- devlevel -->
+        <DevLogLevel>warn</DevLogLevel>
+        <LogFileDir>/data/app/log</LogFileDir>
+        <LogMemDir>/tmp/log</LogMemDir>
+        <PortStart>8000</PortStart>
+        <PortEnd>8500</PortEnd>
+    </General>
+    <!-- Override the general setting, highest prioriy -->
+    <AppList>
+        <App>
+            <ID>demo</ID>
+            <Name>示例应用</Name>
+            <DefaultLevel>info</DefaultLevel>
+            <VerboseExportMode>memory|network</VerboseExportMode> 
+            <Name>流媒体外后视镜</Name>
+            <PortOffset>20</PortOffset>
+        </App> 
+        <App>
+            <ID>I_CMS</ID>
+            <Name>流媒体内后视镜</Name>
+            <PortOffset>2</PortOffset>
+        </App>
+        <App>
+            <ID>SigMgr</ID>
+            <Name>信号管理服务</Name>
+            <PortOffset>3</PortOffset>
+        </App>
+        <App>
+            <ID>exec_mgr</ID>
+            <Name>执行管理</Name>
+            <PortOffset>4</PortOffset>
+        </App>
+        <App>
+            <ID>PHM</ID>
+            <Name>平台健康管理</Name>
+            <PortOffset>5</PortOffset>
+        </App>
+        <App>
+            <ID>DiaMgr</ID>
+            <Name>诊断管理</Name>
+            <DefaultLevel>info</DefaultLevel>
+            <ErrorExportMode>file|console</ErrorExportMode>
+            <LogFileMaxSize>1mb</LogFileMaxSize>
+            <PortOffset>6</PortOffset>
+        </App>
+        <App>
+            <ID>RPC</ID>
+            <PortOffset>7</PortOffset>
+            <Name>远程调用</Name>
+        </App>
+        <App>
+            <ID>DATABUS</ID>
+            <PortOffset>8</PortOffset>
+            <Name>数据总线</Name>
+        </App>
+        <App>
+            <ID>comm</ID>
+            <PortOffset>9</PortOffset>
+            <Name>通信管理</Name>
+        </App>
+        <App>
+            <ID>pixLight</ID>
+            <PortOffset>10</PortOffset>
+            <Name>像素大灯</Name>
+            <LogFileMaxSize>1mb</LogFileMaxSize>
+        </App>
+        <App>
+            <ID>someip</ID>
+            <PortOffset>11</PortOffset>
+            <Name>someip</Name>
+        </App>
+        <App>
+            <ID>ArHud</ID>
+            <PortOffset>12</PortOffset>
+            <Name>增强现实抬头显示</Name>
+        </App>
+        <App>
+            <ID>warping</ID>
+            <PortOffset>13</PortOffset>
+            <Name>arhud畸变模块</Name>
+        </App>
+        <App>
+            <ID>I_CMS</ID>
+            <Name>流媒体内后视镜</Name>
+            <PortOffset>1</PortOffset>
+        </App>
+    </AppList>
+</LogMgr>
