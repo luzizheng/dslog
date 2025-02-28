@@ -209,6 +209,13 @@ void *network_thread_func(void *arg)
                 }
                 pthread_mutex_unlock(&ctx->client_lock);
             }
+            else
+            {
+                if (errno == EINTR)
+                    continue; // 处理系统中断
+                perror("[log-err] accept failed");
+                break;
+            }
         }
 
         /* 处理客户端数据 */
@@ -309,31 +316,37 @@ static void remove_client(LogContext *ctx, int fd)
 
     /* 同时清理重传队列 */
     pthread_mutex_lock(&retry_queue_lock);
-    for (int i = 0; i < retry_queue_size; ) {
-        if (retry_queue[i].target_fd == fd) { // 直接访问数组
+    for (int i = 0; i < retry_queue_size;)
+    {
+        if (retry_queue[i].target_fd == fd)
+        { // 直接访问数组
             free(retry_queue[i].packet_data);
-            
+
             /* 高效移除：交换末尾元素 */
-            retry_queue[i] = retry_queue[retry_queue_size-1];
+            retry_queue[i] = retry_queue[retry_queue_size - 1];
             retry_queue_size--;
-        } else {
+        }
+        else
+        {
             i++;
         }
     }
     pthread_mutex_unlock(&retry_queue_lock);
 }
 
-
 extern pthread_mutex_t contexts_lock;
 extern size_t num_contexts;
 extern LogContext **contexts;
 /* 通过fd查找上下文（需在全局上下文列表遍历） */
-static LogContext* get_context_by_fd(int fd)
+static LogContext *get_context_by_fd(int fd)
 {
     pthread_mutex_lock(&contexts_lock);
-    for (size_t i=0; i<num_contexts; ++i) {
-        for(int j=0; j<contexts[i]->num_clients; ++j) {
-            if (contexts[i]->client_fds[j] == fd) {
+    for (size_t i = 0; i < num_contexts; ++i)
+    {
+        for (int j = 0; j < contexts[i]->num_clients; ++j)
+        {
+            if (contexts[i]->client_fds[j] == fd)
+            {
                 pthread_mutex_unlock(&contexts_lock);
                 return contexts[i];
             }
@@ -350,7 +363,7 @@ void send_response(int fd, NetPacket *packet, size_t pkt_len)
     packet->header.magic = htons(packet->header.magic);
     packet->header.seq_num = htonl(packet->header.seq_num);
     packet->header.data_len = htonl(packet->header.data_len);
-    
+
     /* 计算校验和 */
     packet->header.checksum = 0;
     uint16_t checksum = calc_checksum(packet, pkt_len);
@@ -358,16 +371,24 @@ void send_response(int fd, NetPacket *packet, size_t pkt_len)
 
     /* 非阻塞发送并处理错误 */
     ssize_t sent = send(fd, packet, pkt_len, MSG_NOSIGNAL);
-    if (sent == -1) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    if (sent == -1)
+    {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
             add_to_retry_queue(fd, packet, pkt_len);
-        } else if (errno == EPIPE) {
+        }
+        else if (errno == EPIPE)
+        {
             remove_client(get_context_by_fd(fd), fd); // 需要实现fd到上下文的查找
         }
-    } else if ((size_t)sent < pkt_len) {
+    }
+    else if ((size_t)sent < pkt_len)
+    {
         /* 部分发送处理 */
         add_partial_to_retry_queue(fd, packet, pkt_len, sent);
-    } else {
+    }
+    else
+    {
         /* 成功发送则加入确认等待队列 */
         add_to_retry_queue(fd, packet, pkt_len);
     }
@@ -392,7 +413,10 @@ void send_log_to_network(LogContext *ctx, const char *formatted_log,
     size_t total_len = sizeof(NetPacketHeader) + sizeof(RealtimeLogData) + msg_len;
     NetPacket *packet = malloc(total_len);
     if (!packet)
+    {
+        ctx->stats.net_errors++;
         return;
+    }
 
     /* 填充协议头 */
     packet->header.magic = 0xA55A; /* 稍后转换字节序 */

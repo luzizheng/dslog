@@ -6,9 +6,11 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include "lognwf.h"
+#include <signal.h>
 #include <pthread.h>
+
 #include "logindef.h"
+#include "lognwf.h"
 
 /* 函数声明 */
 
@@ -24,24 +26,26 @@ static pthread_mutex_t contexts_lock = PTHREAD_MUTEX_INITIALIZER;
 static LogContext **contexts = NULL;
 static size_t num_contexts = 0;
 
-
-static void handle_subscribe_log(LogContext* ctx, int fd)
+static void handle_subscribe_log(LogContext *ctx, int fd)
 {
     /* 检查客户端是否已存在 */
     pthread_mutex_lock(&ctx->client_lock);
-    
+
     int already_subscribed = 0;
-    for(int i=0; i<ctx->num_clients; ++i) {
-        if(ctx->client_fds[i] == fd) {
+    for (int i = 0; i < ctx->num_clients; ++i)
+    {
+        if (ctx->client_fds[i] == fd)
+        {
             already_subscribed = 1;
             break;
         }
     }
 
     /* 添加新订阅 */
-    if(!already_subscribed && ctx->num_clients < MAX_CLIENTS) {
+    if (!already_subscribed && ctx->num_clients < MAX_CLIENTS)
+    {
         ctx->client_fds[ctx->num_clients++] = fd;
-        
+
         /* 发送订阅确认 */
         NetPacket ack = {
             .header = {
@@ -49,11 +53,11 @@ static void handle_subscribe_log(LogContext* ctx, int fd)
                 .version = 0x01,
                 .cmd_type = 0x04,
                 .seq_num = atomic_fetch_add(&ctx->seq_counter, 1),
-                .data_len = htonl(0)
-            }
-        };
+                .data_len = htonl(0)}};
         send_response(fd, &ack, sizeof(NetPacketHeader));
-    } else {
+    }
+    else
+    {
         /* 发送错误响应 */
         send_error_response(fd, 0, DLTRC_NOT_SUPPORTED);
     }
@@ -63,7 +67,7 @@ static void handle_subscribe_log(LogContext* ctx, int fd)
 
 /* 命令处理函数 */
 void process_client_command(LogContext *ctx, int fd,
-                                   NetPacketHeader *header)
+                            NetPacketHeader *header)
 {
     uint32_t data_len = ntohl(header->data_len);
     uint8_t *buffer = malloc(sizeof(NetPacketHeader) + data_len);
@@ -120,56 +124,74 @@ static void handle_get_info(LogContext *ctx, int fd, NetPacket *packet)
 }
 
 /* 初始化上下文示例 */
-LogContext* create_context(const char* appId) {
-    LogContext* ctx = calloc(1, sizeof(LogContext));
-    strncpy(ctx->appId, appId, MAX_APPID_LEN-1);
-    
+LogContext *create_context(const char *appId)
+{
+    LogContext *ctx = calloc(1, sizeof(LogContext));
+    strncpy(ctx->appId, appId, MAX_APPID_LEN - 1);
+
     pthread_mutex_init(&ctx->client_lock, NULL);
     pthread_mutex_init(&ctx->log_lock, NULL);
-    
+
     ctx->port_config.start = 8000;
     ctx->port_config.end = 8500;
     ctx->running = 1;
-    
+
     return ctx;
 }
 
 /* 配套资源管理函数 */
-void destroy_context(LogContext* ctx) {
-    if(ctx->sockfd > 0) close(ctx->sockfd);
-    if(ctx->mem_buffer.buffer) free(ctx->mem_buffer.buffer);
+void destroy_context(LogContext *ctx)
+{
+    if (ctx->sockfd > 0)
+        close(ctx->sockfd);
+    if (ctx->mem_buffer.buffer)
+        free(ctx->mem_buffer.buffer);
     pthread_mutex_destroy(&ctx->client_lock);
     pthread_mutex_destroy(&ctx->log_lock);
     free(ctx);
 }
 
-
-const char* log_level_str(LogMgrLevel level)
+const char *log_level_str(LogMgrLevel level)
 {
-    static const char* const level_strings[] = {
-        "OFF",      // 0
-        "FATAL",    // 1
-        "ERROR",    // 2
-        "WARN",     // 3
-        "INFO",     // 4
-        "DEBUG",    // 5
-        "VERBOSE",  // 6
-        "UNKNOWN"   // 7
+    static const char *const level_strings[] = {
+        "OFF",     // 0
+        "FATAL",   // 1
+        "ERROR",   // 2
+        "WARN",    // 3
+        "INFO",    // 4
+        "DEBUG",   // 5
+        "VERBOSE", // 6
+        "UNKNOWN"  // 7
     };
 
-    const size_t max_index = sizeof(level_strings)/sizeof(level_strings[0]) - 1;
-    const unsigned int index = (level < 0) ? 0 : ( (level > max_index) ? max_index : level );
+    int max_index = (int)(sizeof(level_strings) / sizeof(level_strings[0]) - 1);
+    int index = (level < 0) ? 0 : ((level > max_index) ? max_index : level);
     return level_strings[index];
 }
 
-void parse_xml_config(LogContext * _cxt, const char *appid)
+void parse_xml_config(LogContext *_cxt, const char *appid)
 {
     // 需要实现
 }
 
 /* 初始化 */
-DLTRC dlt_init_client(const char *appId) 
+DLTRC dlt_init_client(const char *appId)
 {
+
+    /* --------------- 信号安全处理 --------------- */
+// #if !defined(_WIN32)
+//     static sig_atomic_t sigpipe_initialized = 0;
+//     if (!sigpipe_initialized)
+//     {
+//         struct sigaction sa;
+//         sa.sa_handler = SIG_IGN;
+//         sigemptyset(&sa.sa_mask);
+//         sa.sa_flags = 0;
+//         sigaction(SIGPIPE, &sa, NULL); // 比 signal() 更可靠
+//         sigpipe_initialized = 1;
+//     }
+// #endif
+
     /* 参数校验 */
     if (!appId || strlen(appId) >= MAX_APPID_LEN)
         return DLTRC_PARAMS_ERR;
@@ -177,45 +199,50 @@ DLTRC dlt_init_client(const char *appId)
     pthread_mutex_lock(&contexts_lock);
 
     /* 检查重复初始化 */
-    for (size_t i = 0; i < num_contexts; ++i) {
-        if (strcmp(contexts[i]->appId, appId) == 0) {
+    for (size_t i = 0; i < num_contexts; ++i)
+    {
+        if (strcmp(contexts[i]->appId, appId) == 0)
+        {
             pthread_mutex_unlock(&contexts_lock);
             return DLTRC_FW_EXIST;
         }
     }
 
     /* 分配上下文 */
-    LogContext* ctx = calloc(1, sizeof(LogContext));
-    if (!ctx) {
+    LogContext *ctx = calloc(1, sizeof(LogContext));
+    if (!ctx)
+    {
         pthread_mutex_unlock(&contexts_lock);
         return DLTRC_OUTOF_MEM;
     }
 
     /* 基础初始化 */
-    strncpy(ctx->appId, appId, MAX_APPID_LEN-1);
+    strncpy(ctx->appId, appId, MAX_APPID_LEN - 1);
     ctx->running = 1;
     ctx->seq_counter = 0;
-    
+
     /* 初始化互斥锁 */
     pthread_mutex_init(&ctx->client_lock, NULL);
     pthread_mutex_init(&ctx->log_lock, NULL);
 
     /* 解析XML配置 */
-    parse_xml_config(ctx,appId); // 伪函数，需实现XML解析
+    parse_xml_config(ctx, appId); // 伪函数，需实现XML解析
 
     /* 网络端口初始化 */
     int port = ctx->port_config.start + ctx->port_config.offset;
-    for (int retry = 0; retry < MAX_PORT_RETRIES; ++retry) {
+    for (int retry = 0; retry < MAX_PORT_RETRIES; ++retry)
+    {
         ctx->sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (ctx->sockfd < 0) break;
+        if (ctx->sockfd < 0)
+            break;
 
         struct sockaddr_in addr = {
             .sin_family = AF_INET,
             .sin_addr.s_addr = INADDR_ANY,
-            .sin_port = htons(port)
-        };
+            .sin_port = htons(port)};
 
-        if (bind(ctx->sockfd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+        if (bind(ctx->sockfd, (struct sockaddr *)&addr, sizeof(addr)) == 0)
+        {
             ctx->listen_port = port;
             listen(ctx->sockfd, 5);
             break;
@@ -224,15 +251,17 @@ DLTRC dlt_init_client(const char *appId)
         port = (port + 1) % (ctx->port_config.end + 1);
     }
 
-    if (ctx->sockfd < 0) {
+    if (ctx->sockfd < 0)
+    {
         free(ctx);
         pthread_mutex_unlock(&contexts_lock);
         return DLTRC_WRITER_INIT_ERR;
     }
 
     /* 启动网络线程 */
-    if (pthread_create(&ctx->network_thread, NULL, 
-                      network_thread_func, ctx) != 0) {
+    if (pthread_create(&ctx->network_thread, NULL,
+                       network_thread_func, ctx) != 0)
+    {
         close(ctx->sockfd);
         free(ctx);
         pthread_mutex_unlock(&contexts_lock);
@@ -240,7 +269,7 @@ DLTRC dlt_init_client(const char *appId)
     }
 
     /* 添加到全局列表 */
-    contexts = realloc(contexts, (num_contexts+1)*sizeof(LogContext*));
+    contexts = realloc(contexts, (num_contexts + 1) * sizeof(LogContext *));
     contexts[num_contexts++] = ctx;
 
     pthread_mutex_unlock(&contexts_lock);
@@ -275,28 +304,33 @@ static bool levelFilter(LogMgrLevel defaultLv, LogMgrLevel curLv)
     return false;
 }
 
-/* 通用日志实现 */ 
+/* 通用日志实现 */
 static DLTRC log_common(
-    const char* appId, 
+    const char *appId,
     LogMgrLevel level,
-    const char* szFormat,
+    const char *szFormat,
     va_list args)
 {
-    LogContext* ctx = NULL;
-    
+    LogContext *ctx = NULL;
+
     /* 查找上下文 */
     pthread_mutex_lock(&contexts_lock);
-    for (size_t i=0; i<num_contexts; ++i) {
-        if (strcmp(contexts[i]->appId, appId) == 0) {
+    for (size_t i = 0; i < num_contexts; ++i)
+    {
+        if (strcmp(contexts[i]->appId, appId) == 0)
+        {
             ctx = contexts[i];
             break;
         }
     }
     pthread_mutex_unlock(&contexts_lock);
 
-    if (!ctx) return DLTRC_NOT_FOUND_APP;
-    if (ctx->level == LogLevel_OFF) return DLTRC_LOGENABLE_FALSE;
-    if (levelFilter(ctx->level,level) == false) return DLTRC_LEVEL_ABORT;
+    if (!ctx)
+        return DLTRC_NOT_FOUND_APP;
+    if (ctx->level == LogLevel_OFF)
+        return DLTRC_LOGENABLE_FALSE;
+    if (levelFilter(ctx->level, level) == false)
+        return DLTRC_LEVEL_ABORT;
 
     /* 生成日志头 */
     struct timeval tv;
@@ -306,10 +340,10 @@ static DLTRC log_common(
 
     char header[256];
     snprintf(header, sizeof(header),
-        "[%04d-%02d-%02d %02d:%02d:%02d.%03ld][PID:%d][%s]",
-        tm_buf.tm_year+1900, tm_buf.tm_mon+1, tm_buf.tm_mday,
-        tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, tv.tv_usec/1000,
-        getpid(), log_level_str(level));
+             "[%04d-%02d-%02d %02d:%02d:%02d.%03ld][PID:%d][%s]",
+             tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday,
+             tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, tv.tv_usec / 1000,
+             getpid(), log_level_str(level));
 
     /* 格式化消息体 */
     char message[4096];
@@ -321,50 +355,65 @@ static DLTRC log_common(
 
     /* 确定输出模式 */
     LogMgrMode mode;
-    switch(level) {
-        case LogLevel_Fatal:
-        case LogLevel_Error: mode = ctx->error_mode; break;
-        case LogLevel_Warn:  mode = ctx->warn_mode;  break;
-        default:             mode = ctx->verbose_mode;
+    switch (level)
+    {
+    case LogLevel_Fatal:
+    case LogLevel_Error:
+        mode = ctx->error_mode;
+        break;
+    case LogLevel_Warn:
+        mode = ctx->warn_mode;
+        break;
+    default:
+        mode = ctx->verbose_mode;
     }
 
     /* 输出到不同目标 */
     pthread_mutex_lock(&ctx->log_lock);
-    
+
     // 控制台输出
-    if (mode & LogMode_Console) {
+    if (mode & LogMode_Console)
+    {
         fputs(full_log, stdout);
         fflush(stdout);
     }
 
     // 网络输出
-    if (mode & LogMode_Network) {
+    if (mode & LogMode_Network)
+    {
         send_log_to_network(ctx, full_log, level);
     }
 
     // 文件输出（预留接口）
-    if (mode & LogMode_File) {
+    if (mode & LogMode_File)
+    {
         // file_writer_write(ctx, full_log);
     }
 
     // 内存缓存（环形缓冲区）
-    if (mode & LogMode_Mem) {
+    if (mode & LogMode_Mem)
+    {
         size_t len = strlen(full_log);
         pthread_mutex_lock(&ctx->log_lock);
-        if (ctx->mem_buffer.capacity > 0) {
-            size_t avail = ctx->mem_buffer.capacity - 
-                (ctx->mem_buffer.head - ctx->mem_buffer.tail);
-            if (avail < len) {
+        if (ctx->mem_buffer.capacity > 0)
+        {
+            size_t avail = ctx->mem_buffer.capacity -
+                           (ctx->mem_buffer.head - ctx->mem_buffer.tail);
+            if (avail < len)
+            {
                 ctx->stats.drop_count++;
-            } else {
-                size_t wrap = ctx->mem_buffer.capacity - 
-                    (ctx->mem_buffer.head % ctx->mem_buffer.capacity);
+            }
+            else
+            {
+                size_t wrap = ctx->mem_buffer.capacity -
+                              (ctx->mem_buffer.head % ctx->mem_buffer.capacity);
                 size_t copy_len = (len > wrap) ? wrap : len;
-                memcpy(ctx->mem_buffer.buffer + ctx->mem_buffer.head, 
-                      full_log, copy_len);
-                if (copy_len < len) {
-                    memcpy(ctx->mem_buffer.buffer, 
-                          full_log + copy_len, len - copy_len);
+                memcpy(ctx->mem_buffer.buffer + ctx->mem_buffer.head,
+                       full_log, copy_len);
+                if (copy_len < len)
+                {
+                    memcpy(ctx->mem_buffer.buffer,
+                           full_log + copy_len, len - copy_len);
                 }
                 ctx->mem_buffer.head += len;
             }
@@ -430,13 +479,14 @@ DLTRC dlt_log_verbose(const char *appId, const char *szFormat, ...)
 void dlt_free_client(const char *appId)
 {
     pthread_mutex_lock(&contexts_lock);
-    
-    for (size_t i = 0; i < num_contexts; ++i) {
-        if (strcmp(contexts[i]->appId, appId) != 0) 
+
+    for (size_t i = 0; i < num_contexts; ++i)
+    {
+        if (strcmp(contexts[i]->appId, appId) != 0)
             continue;
 
-        LogContext* ctx = contexts[i];
-        
+        LogContext *ctx = contexts[i];
+
         /* 停止网络线程 */
         ctx->running = 0;
         pthread_join(ctx->network_thread, NULL);
@@ -444,14 +494,15 @@ void dlt_free_client(const char *appId)
         /* 关闭网络连接 */
         close(ctx->sockfd);
         pthread_mutex_lock(&ctx->client_lock);
-        for (int j=0; j<ctx->num_clients; ++j) {
+        for (int j = 0; j < ctx->num_clients; ++j)
+        {
             close(ctx->client_fds[j]);
         }
         ctx->num_clients = 0;
         pthread_mutex_unlock(&ctx->client_lock);
 
         /* 释放内存资源 */
-        if (ctx->mem_buffer.buffer) 
+        if (ctx->mem_buffer.buffer)
             free(ctx->mem_buffer.buffer);
 
         /* 销毁互斥锁 */
@@ -459,8 +510,8 @@ void dlt_free_client(const char *appId)
         pthread_mutex_destroy(&ctx->log_lock);
 
         /* 从全局列表移除 */
-        memmove(&contexts[i], &contexts[i+1], 
-               (num_contexts-i-1)*sizeof(LogContext*));
+        memmove(&contexts[i], &contexts[i + 1],
+                (num_contexts - i - 1) * sizeof(LogContext *));
         num_contexts--;
         free(ctx);
         break;

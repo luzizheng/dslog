@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC  -fPIC -Wall -Wextra -shared -Wl,-soname,libm_log.so.1 -o libm_log.so.1.0.0 CMakeFiles/m_log.dir/logMgr.c.o CMakeFiles/m_log.dir/lognwf.c.o 

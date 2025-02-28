@@ -1,0 +1,7 @@
+/home/byd/giteecode/dslog/build/CMakeFiles/m_log.dir
+/home/byd/giteecode/dslog/build/CMakeFiles/edit_cache.dir
+/home/byd/giteecode/dslog/build/CMakeFiles/rebuild_cache.dir
+/home/byd/giteecode/dslog/build/CMakeFiles/list_install_components.dir
+/home/byd/giteecode/dslog/build/CMakeFiles/install.dir
+/home/byd/giteecode/dslog/build/CMakeFiles/install/local.dir
+/home/byd/giteecode/dslog/build/CMakeFiles/install/strip.dir
